@@ -9,11 +9,11 @@
     </div>
     <router-view v-else />
     <ConflictResolver
-      v-if="sync.activeConflict"
-      :conflict="sync.activeConflict.conflict"
-      :queue-item-id="sync.activeConflict.queueItemId"
-      :request-url="sync.activeConflict.request.url"
-      :request-method="sync.activeConflict.request.method"
+      v-if="activeConflict"
+      :conflict="activeConflict.conflict"
+      :queue-item-id="activeConflict.queueItemId"
+      :request-url="activeConflict.request.url"
+      :request-method="activeConflict.request.method"
       @resolved="sync.resolveConflict()"
       @discarded="sync.resolveConflict()"
     />
@@ -29,7 +29,9 @@ import ConflictResolver from '@/components/ConflictResolver.vue'
 
 const auth = useAuthStore()
 auth.loadFromStorage()
+
 const sync = useSyncManager()
+const { activeConflict } = sync
 </script>
 
 <style>

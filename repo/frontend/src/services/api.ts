@@ -68,8 +68,15 @@ api.interceptors.response.use(
         try {
           // Handle FormData (multipart) vs JSON
           let queueData: unknown = null
-          const contentType = error.config.headers?.['Content-Type'] || ''
-
+          const rawContentType =
+          error.config.headers?.['Content-Type'] ?? error.config.headers?.['content-type']
+        
+          const contentType =
+            typeof rawContentType === 'string'
+              ? rawContentType
+              : Array.isArray(rawContentType)
+                ? rawContentType.join('; ')
+                : ''
           if (error.config.data instanceof FormData) {
             // Convert FormData to a serializable object; store files as blobs separately
             const obj: Record<string, string> = {}
