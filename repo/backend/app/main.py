@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine, Base, async_session_factory
+from app.database import Base, get_async_session_factory, get_engine
 from app.routers import (
     auth,
     users,
@@ -47,6 +47,8 @@ async def lifespan(app: FastAPI):
         )
     # Startup: create tables and seed default admin
     logger.info("HarborView backend starting up")
+    engine = get_engine()
+    async_session_factory = get_async_session_factory()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with async_session_factory() as session:
