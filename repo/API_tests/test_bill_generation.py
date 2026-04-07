@@ -1,6 +1,7 @@
 """API tests for bill generation and billing rules (tax calculations)."""
 
 from decimal import Decimal
+from datetime import date
 
 import httpx
 
@@ -36,13 +37,14 @@ def _cleanup_fee_items(base_url: str, admin_token: str):
 
 def test_bill_generation_with_tax_calculations(base_url: str, auth_token: str):
     """
-    Create fee items, generate bills for 2026-05, verify:
+    Create fee items, generate bills for a unique period, verify:
     - subtotal = 1500.00
     - tax_total = 6.00 (6% of $100 parking fee)
     - total = 1506.00
     - line_items has 2 items
     """
     property_id = _get_property_id(base_url, auth_token)
+    billing_period = f"{date.today().year + 5}-{date.today().month:02d}"
 
     with httpx.Client(
         base_url=base_url,
@@ -78,27 +80,27 @@ def test_bill_generation_with_tax_calculations(base_url: str, auth_token: str):
         print(f"[POST /billing/fee-items 'Parking Fee'] status={parking_resp.status_code}")
         assert parking_resp.status_code == 201
 
-        # Generate bills for 2026-05
+        # Generate bills for a far-future period to avoid collisions with existing data
         gen_resp = c.post(
             "/billing/generate",
-            json={"property_id": property_id, "billing_period": "2028-03"},
+            json={"property_id": property_id, "billing_period": billing_period},
         )
-        print(f"[POST /billing/generate period=2026-05] status={gen_resp.status_code}")
+        print(f"[POST /billing/generate period={billing_period}] status={gen_resp.status_code}")
         assert gen_resp.status_code == 202
         gen_data = gen_resp.json()
         print(f"  -> bills_created={gen_data.get('bills_created')}")
         assert gen_data.get("bills_created", 0) > 0
 
-        # Fetch the generated bills for 2026-05
+        # Fetch the generated bills for this test period
         bills_resp = c.get("/billing/bills", params={"page_size": 100})
         bills_resp.raise_for_status()
         all_bills = bills_resp.json()["items"]
 
-        # Filter for 2026-05 period
-        may_bills = [b for b in all_bills if b["billing_period"] == "2028-03"]
-        assert len(may_bills) > 0, "No bills found for 2026-05"
+        # Filter for the target billing period and pick a newly-generated bill
+        period_bills = [b for b in all_bills if b["billing_period"] == billing_period]
+        assert len(period_bills) > 0, f"No bills found for {billing_period}"
 
-        bill = may_bills[0]
+        bill = period_bills[0]
         print(f"\n  Bill details:")
         print(f"    subtotal  = {bill['subtotal']}")
         print(f"    tax_total = {bill['tax_total']}")

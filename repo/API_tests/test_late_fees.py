@@ -1,6 +1,7 @@
 """API tests for late fee application on overdue bills."""
 
 from decimal import Decimal
+from datetime import date
 
 import httpx
 import pytest
@@ -42,7 +43,7 @@ def _ensure_fee_items(base_url: str, admin_token: str, property_id: str):
 
 def test_late_fee_application(base_url: str, auth_token: str):
     """
-    Generate bills for 2024-02 (past period), apply late fees, verify:
+    Generate bills for a unique past period, apply late fees, verify:
     - late_fee = 25.00
     - total increased by 25.00
     - status is 'overdue'
@@ -50,6 +51,7 @@ def test_late_fee_application(base_url: str, auth_token: str):
     If /billing/apply-late-fees does not exist, skip gracefully.
     """
     property_id = _get_property_id(base_url, auth_token)
+    billing_period = f"{date.today().year - 2}-{date.today().month:02d}"
     _ensure_fee_items(base_url, auth_token, property_id)
 
     with httpx.Client(
@@ -57,31 +59,33 @@ def test_late_fee_application(base_url: str, auth_token: str):
         timeout=30.0,
         headers={"Authorization": f"Bearer {auth_token}"},
     ) as c:
-        # Generate bills for a past period (2024-02)
+        # Generate bills for a past period
         gen_resp = c.post(
             "/billing/generate",
-            json={"property_id": property_id, "billing_period": "2024-02"},
+            json={"property_id": property_id, "billing_period": billing_period},
         )
-        print(f"[POST /billing/generate period=2024-02] status={gen_resp.status_code}")
+        print(f"[POST /billing/generate period={billing_period}] status={gen_resp.status_code}")
         if gen_resp.status_code not in (200, 202):
             print(f"  -> Could not generate bills: {gen_resp.text}")
             pytest.skip("Could not generate bills for past period")
 
         gen_data = gen_resp.json()
         print(f"  -> bills_created={gen_data.get('bills_created')}")
+        if gen_data.get("bills_created", 0) <= 0:
+            pytest.skip(f"No new bills created for {billing_period}; period likely already populated")
 
         # Get the bill before late fees
         bills_resp = c.get("/billing/bills", params={"page_size": 100})
         bills_resp.raise_for_status()
-        jan_bills = [
+        period_bills = [
             b for b in bills_resp.json()["items"]
-            if b["billing_period"] == "2024-02"
+            if b["billing_period"] == billing_period and b["status"] in ("generated", "partially_paid")
         ]
-        if not jan_bills:
-            pytest.skip("No bills generated for 2024-02")
+        if not period_bills:
+            pytest.skip(f"No eligible bills generated for {billing_period}")
 
-        original_total = Decimal(str(jan_bills[0]["total"]))
-        bill_id = jan_bills[0]["id"]
+        original_total = Decimal(str(period_bills[0]["total"]))
+        bill_id = period_bills[0]["id"]
         print(f"  -> bill id={bill_id}, original total={original_total}")
 
         # Apply late fees

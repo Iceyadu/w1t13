@@ -13,12 +13,13 @@ Tests:
 """
 
 import math
+import os
 import uuid
 
 import httpx
 import pytest
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = f"{os.environ.get('API_BASE_URL', 'http://localhost:8000')}/api/v1"
 
 ADMIN_CREDS = {"username": "admin", "password": "Admin@Harbor2026"}
 MANAGER_CREDS = {"username": "manager", "password": "Manager@Hbr2026"}

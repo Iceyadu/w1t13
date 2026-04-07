@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
+API_BASE_URL="${API_BASE_URL:-}"
 PASS=0
 FAIL=0
 
@@ -21,6 +21,18 @@ banner() {
 }
 
 wait_for_backend() {
+  if [ -z "$API_BASE_URL" ]; then
+    # Auto-detect common local ports used by this project/evaluators.
+    for candidate in "http://localhost:8001" "http://localhost:8000"; do
+      if curl -sf "$candidate/api/v1/health" > /dev/null 2>&1; then
+        API_BASE_URL="$candidate"
+        break
+      fi
+    done
+    # Keep default fallback for messaging if still not detected.
+    API_BASE_URL="${API_BASE_URL:-http://localhost:8001}"
+  fi
+
   yellow "Waiting for backend at $API_BASE_URL/api/v1/health ..."
   for i in $(seq 1 30); do
     if curl -sf "$API_BASE_URL/api/v1/health" > /dev/null 2>&1; then
@@ -46,7 +58,7 @@ run_pytest() {
   # Fallback for CI/evaluator environments where host python lacks pytest.
   if command -v docker >/dev/null 2>&1; then
     yellow "Host python has no pytest; running tests inside backend container..."
-    docker compose exec -T backend python -m pytest "$test_path" -v --tb=short "$@"
+    docker compose exec -T backend python -m pytest "/workspace/$test_path" -v --tb=short "$@"
     return $?
   fi
 

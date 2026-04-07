@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-harborview_secret}
       POSTGRES_DB: ${POSTGRES_DB:-harborview}
     ports:
-      - "${DB_PORT:-5433}:5433"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -33,10 +33,11 @@ services:
       BACKUP_DIR: /data/backups
       UPLOAD_DIR: /data/uploads
     ports:
-      - "${BACKEND_PORT:-8001}:8001"
+      - "${BACKEND_PORT:-8001}:8000"
     volumes:
       - uploads:/data/uploads
       - backups:/data/backups
+      - ./:/workspace:ro
 
   frontend:
     build:
