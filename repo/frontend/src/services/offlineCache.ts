@@ -59,17 +59,32 @@ const db = new OfflineDatabase()
 
 let _cryptoKey: CryptoKey | null = null
 
-export async function initEncryption(password: string, salt?: string): Promise<void> {
+/**
+ * Returns the persisted per-user random salt (base64), creating and storing one if absent.
+ * The salt is non-sensitive and is kept in localStorage so key derivation is stable across
+ * sessions for the same user on the same device.
+ */
+export function getOrCreateUserSalt(userId: string): string {
+  const storageKey = `harborview_salt_${userId}`
+  const existing = localStorage.getItem(storageKey)
+  if (existing) return existing
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16))
+  const saltB64 = btoa(String.fromCharCode(...saltBytes))
+  localStorage.setItem(storageKey, saltB64)
+  return saltB64
+}
+
+export async function initEncryption(password: string, saltB64: string): Promise<void> {
   const enc = new TextEncoder()
   const keyMaterial = await crypto.subtle.importKey(
     'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
   )
-  const saltBytes = enc.encode(salt || 'harborview-offline-salt')
+  const saltBytes = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0))
   _cryptoKey = await crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt: saltBytes, iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
-    true,
+    false,
     ['encrypt', 'decrypt']
   )
 }
@@ -237,21 +252,6 @@ export async function getBlobsForQueue(queueId: string): Promise<BlobRecord[]> {
 
 export async function removeBlobsForQueue(queueId: string): Promise<void> {
   await db.blob_store.where('queueId').equals(queueId).delete()
-}
-
-// --- Derived key export/import (avoid storing raw passwords) ---
-
-export async function getExportedKey(): Promise<string | null> {
-  if (!_cryptoKey) return null
-  const rawKey = await crypto.subtle.exportKey('raw', _cryptoKey)
-  return btoa(String.fromCharCode(...new Uint8Array(rawKey)))
-}
-
-export async function importKey(base64Key: string): Promise<void> {
-  const keyBytes = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0))
-  _cryptoKey = await crypto.subtle.importKey(
-    'raw', keyBytes, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']
-  )
 }
 
 export { db }

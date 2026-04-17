@@ -46,7 +46,7 @@ Frontend (Vue 3 + TypeScript)  -->  Backend (FastAPI)  -->  PostgreSQL
 ### Prerequisites
 
 - Docker and Docker Compose installed
-- Ports 80, 8000, 5432 available
+- Ports 8080, 8001, 5434 available (override `DB_PORT` in `.env` if that host port is taken)
 
 ### Quick Start
 
@@ -61,9 +61,9 @@ docker compose up --build -d
 docker compose logs -f backend
 
 # 4. Access the application
-#    Frontend: http://localhost
-#    Backend API: http://localhost:8000
-#    API docs: http://localhost:8000/docs
+#    Frontend: http://localhost:8080
+#    Backend API: http://localhost:8001
+#    API docs: http://localhost:8001/docs
 ```
 
 ### Stopping
@@ -77,11 +77,11 @@ docker compose down -v       # Stop and remove volumes (reset data)
 
 | Service | URL |
 |---------|-----|
-| Frontend (web app) | http://localhost |
-| Backend API | http://localhost:8000 |
-| Swagger/OpenAPI docs | http://localhost:8000/docs |
-| Health check | http://localhost:8000/api/v1/health |
-| PostgreSQL | localhost:5432 |
+| Frontend (web app) | http://localhost:8080 |
+| Backend API | http://localhost:8001 |
+| Swagger/OpenAPI docs | http://localhost:8001/docs |
+| Health check | http://localhost:8001/api/v1/health |
+| PostgreSQL | localhost:5434 |
 
 ## Seed Credentials
 

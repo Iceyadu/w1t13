@@ -6,8 +6,8 @@ export const useOfflineStore = defineStore('offline', () => {
   const isEncryptionReady = ref(false)
   const pendingWrites = ref(0)
 
-  async function setupEncryption(password: string): Promise<void> {
-    await initEncryption(password)
+  async function setupEncryption(password: string, saltB64: string): Promise<void> {
+    await initEncryption(password, saltB64)
     isEncryptionReady.value = true
   }
 

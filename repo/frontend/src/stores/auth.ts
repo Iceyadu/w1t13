@@ -27,15 +27,12 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('harborview_token')
     localStorage.removeItem('harborview_refresh')
     localStorage.removeItem('harborview_user')
-    // Initialize offline encryption
+    // Initialize offline encryption with a per-user random salt (stored in localStorage).
+    // The derived key is kept in-memory only and re-derived on each login.
     const offlineStore = useOfflineStore()
-    await offlineStore.setupEncryption(password)
-    // Store derived key (not raw password) in sessionStorage for reload recovery
-    const { getExportedKey } = await import('@/services/offlineCache')
-    const derivedKey = await getExportedKey()
-    if (derivedKey) {
-      sessionStorage.setItem('harborview_offline_dk', derivedKey)
-    }
+    const { getOrCreateUserSalt } = await import('@/services/offlineCache')
+    const saltB64 = getOrCreateUserSalt(resp.data.user.id)
+    await offlineStore.setupEncryption(password, saltB64)
   }
 
   async function logout() {
@@ -55,7 +52,6 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('harborview_token')
     localStorage.removeItem('harborview_refresh')
     localStorage.removeItem('harborview_user')
-    sessionStorage.removeItem('harborview_offline_dk')
     const offlineStore = useOfflineStore()
     offlineStore.teardownEncryption()
     offlineStore.clearAll()
@@ -72,11 +68,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('harborview_token')
     localStorage.removeItem('harborview_refresh')
     localStorage.removeItem('harborview_user')
-    // Restore offline encryption from derived key (not raw password)
-    const derivedKey = sessionStorage.getItem('harborview_offline_dk')
-    if (derivedKey && token.value) {
-      import('@/services/offlineCache').then(({ importKey }) => importKey(derivedKey))
-    }
+    // Offline encryption key is in-memory only and re-derived on next login.
   }
 
   function hasRole(...roles: string[]): boolean {

@@ -20,6 +20,7 @@ from app.schemas.order import (
     OrderUpdate,
     MilestoneResponse,
 )
+from app.middleware.idempotency import check_idempotency, store_idempotency
 from app.services.order_service import validate_transition, transition_order
 from app.services.audit_service import log_audit
 
@@ -110,6 +111,11 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Check idempotency via persistent store
+    existing_idem = await check_idempotency(db, body.idempotency_key)
+    if existing_idem and existing_idem.response_body:
+        return OrderResponse.model_validate(existing_idem.response_body)
+
     # Idempotency check: if an order with this key already exists, return it
     existing = await db.execute(
         select(Order).where(Order.idempotency_key == body.idempotency_key)
@@ -118,7 +124,22 @@ async def create_order(
     if existing_order:
         return OrderResponse.model_validate(existing_order)
 
-    resident = await _get_resident_for_user(db, current_user.id)
+    # Resolve resident context: residents use their own profile; staff must supply resident_id
+    if current_user.role == "resident":
+        resident = await _get_resident_for_user(db, current_user.id)
+    else:
+        if not body.resident_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Staff must provide resident_id when creating orders",
+            )
+        res_result = await db.execute(select(Resident).where(Resident.id == body.resident_id))
+        resident = res_result.scalars().first()
+        if not resident:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resident not found",
+            )
 
     order = Order(
         resident_id=resident.id,
@@ -147,6 +168,12 @@ async def create_order(
         db, user_id=current_user.id, action="CREATE",
         resource_type="order", resource_id=order.id,
         new_value={"status": "created", "title": order.title},
+    )
+
+    response = OrderResponse.model_validate(order)
+    await store_idempotency(
+        db, body.idempotency_key, current_user.id,
+        "/orders", 201, response.model_dump(mode="json"),
     )
 
     await db.commit()
@@ -238,7 +265,12 @@ async def transition_order_endpoint(
 
     order = await _get_order_or_404(db, order_id)
 
-    # Idempotency: check if this transition was already applied
+    # Idempotency: check persistent store by explicit request key
+    existing_idem = await check_idempotency(db, body.idempotency_key)
+    if existing_idem and existing_idem.response_body:
+        return OrderResponse.model_validate(existing_idem.response_body)
+
+    # Secondary idempotency: if this milestone already exists, return current state
     existing_milestone = await db.execute(
         select(OrderMilestone).where(
             OrderMilestone.order_id == order_id,
@@ -246,7 +278,6 @@ async def transition_order_endpoint(
         )
     )
     if existing_milestone.scalars().first():
-        # Transition already happened — return current order state (idempotent)
         return OrderResponse.model_validate(order)
 
     if if_match is not None and str(order.version) != if_match:
@@ -310,6 +341,12 @@ async def transition_order_endpoint(
         resource_type="order", resource_id=order.id,
         old_value={"status": old_status},
         new_value={"status": body.to_status},
+    )
+
+    response = OrderResponse.model_validate(order)
+    await store_idempotency(
+        db, body.idempotency_key, current_user.id,
+        f"/orders/{order_id}/transition", 200, response.model_dump(mode="json"),
     )
 
     await db.commit()

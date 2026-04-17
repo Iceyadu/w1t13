@@ -10,6 +10,8 @@ from app.dependencies import get_current_user, require_roles
 from app.utils.conflict import raise_conflict, detect_changed_fields
 from app.models.listing import Listing, ListingMedia
 from app.models.media import Media
+from app.models.property import Unit
+from app.models.resident import Resident
 from app.models.user import User
 from app.services.audit_service import log_audit
 from app.schemas.listing import (
@@ -59,8 +61,19 @@ async def list_listings(
     offset = (page - 1) * page_size
     query = select(Listing)
 
-    # Residents can only see published listings
+    # Residents can only see published listings scoped to their property
     if current_user.role == "resident":
+        resident_result = await db.execute(
+            select(Resident).where(Resident.user_id == current_user.id)
+        )
+        resident = resident_result.scalars().first()
+        if resident:
+            unit_result = await db.execute(
+                select(Unit).where(Unit.id == resident.unit_id)
+            )
+            unit = unit_result.scalars().first()
+            if unit:
+                query = query.where(Listing.property_id == unit.property_id)
         query = query.where(Listing.status == "published")
     elif status_filter:
         query = query.where(Listing.status == status_filter)

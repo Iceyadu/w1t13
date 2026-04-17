@@ -12,6 +12,7 @@ class OrderCreate(BaseModel):
     category: Optional[str] = None
     priority: str = "normal"
     idempotency_key: uuid.UUID
+    resident_id: Optional[uuid.UUID] = None  # Required for staff; ignored for resident callers
 
 
 class OrderUpdate(BaseModel):

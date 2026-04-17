@@ -312,7 +312,16 @@ async def trigger_restore(
         with tempfile.TemporaryDirectory() as extract_dir_str:
             extract_dir = Path(extract_dir_str)
             with tarfile.open(decrypted_path, "r:gz") as tar:
-                tar.extractall(extract_dir)
+                safe_members = []
+                for member in tar.getmembers():
+                    member_path = Path(member.name)
+                    if member_path.is_absolute() or ".." in member_path.parts:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Backup archive contains unsafe file paths",
+                        )
+                    safe_members.append(member)
+                tar.extractall(extract_dir, members=safe_members)
             dump_file = extract_dir / "database.dump"
             if not dump_file.exists():
                 record.status = "restore_failed"
